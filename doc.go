@@ -18,7 +18,7 @@ we use **MustInvoke** method to simply present the way where we keep type safety
 
 	func main() {
 		ctx := context.Background()
-		
+
 		http.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 			io.WriteString(w, "Hello!\n")
 		})
