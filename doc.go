@@ -1,9 +1,6 @@
 /*
 Package shutdown provides simple shutdown signals handler with callback
 
-Take the following example:
-First file `main.go` simply gets the repository from the container and prints it
-we use **MustInvoke** method to simply present the way where we keep type safety
 	package main
 
 	import (
