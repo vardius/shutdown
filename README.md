@@ -1,4 +1,4 @@
-shutdown
+⏲️ shutdown
 ================
 [![Build Status](https://travis-ci.org/vardius/shutdown.svg?branch=master)](https://travis-ci.org/vardius/shutdown)
 [![Go Report Card](https://goreportcard.com/badge/github.com/vardius/shutdown)](https://goreportcard.com/report/github.com/vardius/shutdown)
