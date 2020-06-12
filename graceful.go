@@ -24,7 +24,7 @@ func GracefulStop(stop func()) {
 	)
 
 	<-signalChan
-	log.Print("os.Interrupt - shutting down..\n")
+	log.Print("os.Interrupt - shutting down...\n")
 
 	// terminate after second signal before callback is done
 	go func() {
