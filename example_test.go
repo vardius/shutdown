@@ -22,3 +22,24 @@ func Example() {
 	// Output:
 	// shutdown
 }
+
+func Example_second() {
+	// mock shutdown signall Ctrl + C followed by second Ctrl + C
+	go func() {
+		// first signal interrupt
+		time.Sleep(10 * time.Millisecond)
+		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+
+		// second signal kill
+		time.Sleep(10 * time.Millisecond)
+		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+	}()
+
+	shutdown.GracefulStop(func() {
+		time.Sleep(100 * time.Millisecond)
+		fmt.Println("shutdown")
+	})
+
+	// Output:
+	// shutdown
+}
