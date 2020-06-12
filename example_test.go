@@ -41,5 +41,4 @@ func Example_second() {
 	})
 
 	// Output:
-	// shutdown
 }
