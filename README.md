@@ -35,40 +35,39 @@ For **GoDoc** reference, **visit [pkg.go.dev](https://pkg.go.dev/github.com/vard
 package main
 
 import (
-    "context"
-    "net/http"
-    "os"
-    "time"
-    "log"
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"syscall"
+	"time"
 
     "github.com/vardius/shutdown"
 )
 
 func main() {
-    ctx := context.Background()
-    
-    http.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
-        io.WriteString(w, "Hello!\n")
-    })
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+		fmt.Fprintf(w, "Hello!")
+	})
 
-    stop := func() {
-        ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-        defer cancel()
+	httpServer := &http.Server{
+		Addr:    ":8080",
+		Handler: mux,
+	}
 
-        log.Printf("shutting down...\n")
+	stop := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-        if err := srv.Shutdown(ctx); err != nil {
-            log.Printf("shutdown error: %v\n", err)
-        } else {
-            log.Printf("gracefully stopped\n")
-        }
-    }
+		if err := httpServer.Shutdown(ctx); err != nil {
+			log.Printf("shutdown error: %v\n", err)
+		} else {
+			log.Printf("gracefully stopped\n")
+		}
+	}
 
-    go func() {
-        log.Printf("%v\n", http.ListenAndServe(":8080", nil))
-        stop()
-        os.Exit(1)
-    }()
+	shutdown.GracefulStop(stop) // will block until shutdown signal is received
 }
 ```
 
