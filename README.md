@@ -8,7 +8,7 @@
 
 <img align="right" height="180px" src="https://github.com/vardius/gorouter/blob/master/website/src/static/img/logo.png?raw=true" alt="logo" />
 
-shutdown - Simple shutdown signals handler with callback
+shutdown - Simple go signals handler for performing graceful shutdown by executing callback function
 
 📖 ABOUT
 ==================================================
