@@ -30,6 +30,8 @@ For **GoDoc** reference, **visit [pkg.go.dev](https://pkg.go.dev/github.com/vard
 🚏 HOW TO USE
 ==================================================
 
+For detailed breakdown of example [How to handle signals with Go to graceful shutdown HTTP server](https://rafallorenz.com/go/handle-signals-to-graceful-shutdown-http-server/)
+
 ## 🏫 Basic example
 ```go
 package main
@@ -38,7 +40,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os"
 	"syscall"
 	"time"
 
@@ -46,6 +50,8 @@ import (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, "Hello!")
@@ -54,18 +60,28 @@ func main() {
 	httpServer := &http.Server{
 		Addr:    ":8080",
 		Handler: mux,
+		BaseContext: func(_ net.Listener) context.Context { return ctx },
 	}
+	httpServer.RegisterOnShutdown(cancel)
 
 	stop := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		gracefulCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := httpServer.Shutdown(ctx); err != nil {
+		if err := httpServer.Shutdown(gracefulCtx); err != nil {
 			log.Printf("shutdown error: %v\n", err)
 		} else {
 			log.Printf("gracefully stopped\n")
 		}
 	}
+
+	// Run server
+	go func() {
+		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
+			log.Printf("HTTP server ListenAndServe: %v", err)
+			os.Exit(1)
+		}
+	}()
 
 	shutdown.GracefulStop(stop) // will block until shutdown signal is received
 }
