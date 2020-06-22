@@ -51,6 +51,7 @@ import (
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
@@ -62,7 +63,6 @@ func main() {
 		Handler: mux,
 		BaseContext: func(_ net.Listener) context.Context { return ctx },
 	}
-	httpServer.RegisterOnShutdown(cancel)
 
 	stop := func() {
 		gracefulCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
