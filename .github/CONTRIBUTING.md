@@ -1,53 +1,52 @@
 # Contributing
 
-We are open to, and grateful for, any contributions made by the community. By contributing to **shutdown**, you agree to abide by the [code of conduct](https://github.com/vardius/shutdown/blob/master/CODE_OF_CONDUCT.md).
+Thanks for helping improve **shutdown**. By contributing, you agree to abide by the [code of conduct](CODE_OF_CONDUCT.md).
 
-## Reporting Issues and Asking Questions
+## Issues and questions
 
-Before opening an issue, please search the [issue tracker](https://github.com/vardius/shutdown/issues) to make sure your issue hasn't already been reported.
-
-### Bugs and Improvements
-
-We use the issue tracker to keep track of bugs and improvements to **shutdown** itself, its examples, and the documentation. We encourage you to open issues to discuss improvements, architecture, theory, internal implementation, etc. If a topic has been discussed before, we will ask you to join the previous discussion.
-
-Any pull requests that involve breaking changes should be made against the `next` branch.
-
-### Getting Help
-
-For support or usage questions like “how do I do X with **shutdown**” and “my code doesn't work”, we encourage you to post an issue.
-
-Please be considerate when doing this as this is not the primary purpose of the issue tracker.
+Search the [issue tracker](https://github.com/vardius/shutdown/issues) first; if nothing matches, open an issue.
+Bugs, ideas and usage questions are all welcome. For a bug, include the stops you passed, the signals the process got,
+and what you expected to happen.
 
 ## Development
 
-Visit the [issue tracker](https://github.com/vardius/shutdown/issues) to find a list of open issues that need attention.
+You need Go 1.26 or newer.
 
-Fork, then clone the repo:
-
+```sh
+git clone https://github.com/vardius/shutdown.git
+cd shutdown
+go test ./...
 ```
-git clone https://github.com/your-username/shutdown.git
+
+Before sending a pull request, run what CI runs:
+
+```sh
+gofmt -l .
+go vet ./...
+GOOS=windows go vet ./...
+go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+go test -race -shuffle=on ./...
 ```
 
-### Docs
+### Layout
 
-Improvements to the documentation are always welcome. In the docs we abide by typographic rules, so instead of ' you should use '. Same goes for “ ” and dashes (—) where appropriate. These rules only apply to the text, not to code blocks.
+- `shutdown.go` holds `GracefulStop`; `doc.go` is the package documentation.
+- `shutdown_test.go` runs on a fake clock with `testing/synctest`, with fake signals and a fake exit, so timings are exact and
+  nothing sleeps for real. Keep new tests that way.
+- `signal_unix_test.go` sends real signals to the test binary, each only once `GracefulStop` has registered for it, and runs
+  one test in a child process, for SIGQUIT. No test calls the real `os.Exit`.
+- `examples/` holds runnable programs, each with a test. The website shows them, so keep them short.
+- `website/` is the documentation site.
 
-### Sending a Pull Request
+### Website
 
-For non-trivial changes, please open an issue with a proposal for a new feature or refactoring before starting on the work. We don't want you to waste your efforts on a pull request that we won't want to accept.
+```sh
+cd website
+npm ci
+npm run dev
+```
 
-On the other hand, sometimes the best way to start a conversation *is* to send a pull request. Use your best judgement!
+## Pull requests
 
-In general, the contribution workflow looks like this:
-
-* Open a new issue in the [Issue tracker](https://github.com/vardius/shutdown/issues).
-* Fork the repo.
-* Create a new feature branch based off the `master` branch.
-* Make sure all tests pass and there are no linting errors.
-* Submit a pull request, referencing any issues it addresses.
-
-Please try to keep your pull request focused in scope and avoid including unrelated commits.
-
-After you have submitted your pull request, we'll try to get back to you as soon as possible. We may suggest some changes or improvements.
-
-Thank you for contributing!
+- For a large change, open an issue first so we can agree on the approach.
+- Branch from `master`, keep the change focused, and add a test that fails without it.
