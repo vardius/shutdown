@@ -1,0 +1,73 @@
+---
+title: Signals
+description: Which signals start a shutdown, how a context starts one too, what a second signal does, and which signals GracefulStop leaves alone.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+```go
+func GracefulStop(ctx context.Context, timeout time.Duration, stops ...func(context.Context) error) error
+```
+
+`GracefulStop` starts listening for signals when you call it, and stops before it returns.
+
+## What starts the shutdown
+
+| Signal | Usually sent by |
+| --- | --- |
+| SIGINT | Ctrl+C in a terminal |
+| SIGTERM | `kill`, systemd, container runtimes and orchestrators asking a process to stop |
+| SIGHUP | the terminal going away, such as a closed SSH session |
+
+Go's default for each of these is to end the program at once. `GracefulStop` turns that into a shutdown: your stops run
+first, and your `main` decides how to exit.
+
+## Starting it yourself
+
+The shutdown also starts when the `ctx` you pass is done. Pass `context.Background()` when only a signal should start it,
+and a context you cancel when something else should, such as the server failing:
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+go func() {
+	defer cancel() // the server stopped: shut down too
+	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+		log.Print(err)
+	}
+}()
+
+err := shutdown.GracefulStop(ctx, 10*time.Second, srv.Shutdown)
+```
+
+The stops don't inherit `ctx`'s cancellation, only its values, so they still get their full deadline.
+
+## A second signal
+
+The second signal `GracefulStop` receives ends the process at once, with exit status 1. It doesn't matter which signal
+it is: pressing Ctrl+C twice, or a SIGTERM after a SIGINT, both count.
+
+<Aside type="caution" title="Nothing after the second signal runs">
+`GracefulStop` doesn't return, the remaining stops aren't called, and deferred calls don't run. That's the point: it is
+the way out when a stop hangs. Anything that must happen on every exit belongs outside the process, or in a stop that
+finishes well within the deadline.
+</Aside>
+
+`GracefulStop` counts the signals it receives, not shutdowns. When the shutdown started because `ctx` was done, it takes
+two signals to end the process. That matters when `ctx` comes from
+[`signal.NotifyContext`](https://pkg.go.dev/os/signal#NotifyContext): one Ctrl+C cancels that context and reaches
+`GracefulStop` too, and it must not end the process on its own.
+
+## Signals left alone
+
+- **SIGQUIT** keeps Go's default: Ctrl+\ prints the stack of every goroutine and exits with status 2.
+  When a shutdown hangs, that's how to see what it waits for.
+- **Ignored signals stay ignored.** A program started under `nohup` ignores SIGHUP, and `GracefulStop` doesn't listen for
+  it, so the program keeps running when its terminal goes away. The same goes for SIGINT in a job a script runs in the
+  background, and for any of the three that your program passed to `signal.Ignore` before calling `GracefulStop`.
+- **Other signals**, such as SIGUSR1, are untouched.
+
+## Windows
+
+On Windows, Go turns Ctrl+C and Ctrl+Break into SIGINT, and closing the console window, logging off or shutting down
+into SIGTERM; SIGHUP never arrives. Windows ends the process shortly after those last three whatever it does, so keep
+the timeout short there.

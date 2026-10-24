@@ -1,0 +1,135 @@
+---
+title: Graceful shutdown for Go
+description: Stop a Go program gracefully. On SIGINT, SIGTERM or SIGHUP, run your stop functions with a deadline and get their errors back; a second signal ends the process at once.
+template: splash
+hero:
+  title: Stop on a signal, <span class="accent">gracefully</span>
+  tagline: On SIGINT, SIGTERM or SIGHUP, run your stop functions in order, with one deadline, and get their errors back. A second signal ends the process at once.
+  actions:
+    - text: Get started
+      link: getting-started/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/vardius/shutdown
+      icon: github
+      variant: minimal
+---
+
+import { CardGrid, Card, LinkButton, LinkCard, Steps } from '@astrojs/starlight/components';
+import Stats from '../../components/Stats.astro';
+
+<Stats />
+
+<div class="landing-section">
+
+<p class="eyebrow">Features</p>
+
+## What you get
+
+<CardGrid>
+	<Card title="It returns" icon="approve-check">
+		`GracefulStop` returns the stops' errors instead of calling `os.Exit`, so `main` picks the exit status
+		and its deferred calls run.
+	</Card>
+	<Card title="One deadline" icon="seti:clock">
+		The stops share a context that is done a set time after the shutdown starts. Pass `srv.Shutdown` as it is.
+	</Card>
+	<Card title="In order, every error kept" icon="list-format">
+		Stops run one after another, in the order you pass them. Every one is called, and their errors come back
+		joined.
+	</Card>
+	<Card title="A way out" icon="warning">
+		A second signal ends the process at once, with exit status 1, for when a stop hangs.
+	</Card>
+	<Card title="Go's defaults kept" icon="setting">
+		SIGQUIT still dumps every goroutine, and a signal the program ignores, such as SIGHUP under `nohup`, stays
+		ignored.
+	</Card>
+	<Card title="Small and tested" icon="puzzle">
+		One function, no dependencies, and tests that send real signals and run on a fake clock.
+	</Card>
+</CardGrid>
+
+</div>
+
+<div class="landing-section">
+
+<p class="eyebrow">How it works</p>
+
+## From the first signal to the last stop
+
+<div class="landing-lead">
+	`GracefulStop` blocks your `main` until it's time to stop, then runs your stops on the same goroutine and
+	returns.
+</div>
+
+<Steps>
+
+1. **It waits** for SIGINT, SIGTERM or SIGHUP, or for the context you passed to be done.
+
+2. **It runs your stops**, one after another, with a context that is done `timeout` later.
+   Each gets the same deadline; each should return once it passes.
+
+3. **A second signal ends the process** at once, with exit status 1. The stops don't finish and deferred calls
+   don't run.
+
+4. **It returns** the stops' errors joined, or nil, and stops listening for signals.
+   `main` decides what to do with them.
+
+</Steps>
+
+<LinkCard title="Signals" href="signals/" description="Which signals start a shutdown, which end it, and which are left alone." />
+
+</div>
+
+<div class="landing-section">
+
+<p class="eyebrow">Upgrading</p>
+
+## Coming from v1
+
+<div class="landing-lead">
+	v1 ran one function and called `os.Exit(0)`. v2 hands your stops a deadline, returns their errors, and leaves the
+	exit to you.
+</div>
+
+<div class="compare">
+
+```go title="v1"
+shutdown.GracefulStop(func() {
+	ctx, cancel := context.WithTimeout(
+		context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("shutdown: %v", err)
+	}
+})
+// never reached: v1 calls os.Exit(0)
+```
+
+```go title="v2"
+err := shutdown.GracefulStop(
+	context.Background(),
+	10*time.Second,
+	srv.Shutdown,
+)
+if err != nil {
+	log.Fatalf("shutdown: %v", err)
+}
+```
+
+</div>
+
+<LinkCard title="Migration guide" href="migrating-from-v1/" description="The v1 call and its v2 form, and the behaviour changes to know about." />
+
+</div>
+
+<div class="cta not-content">
+	<h2>Drain your first server in five minutes</h2>
+	<p>Install the module, hand GracefulStop your server's Shutdown, and press Ctrl+C. The guide walks through it.</p>
+	<div class="cta-actions">
+		<LinkButton href="getting-started/" icon="right-arrow">Get started</LinkButton>
+		<LinkButton href="stops/" variant="minimal">Read the docs</LinkButton>
+	</div>
+</div>

@@ -1,0 +1,71 @@
+---
+title: Getting started
+description: Install shutdown, serve HTTP until a signal, and let the requests in flight finish before the program exits.
+---
+
+import { Code, LinkCard, CardGrid, Steps } from '@astrojs/starlight/components';
+import server from '../../../../examples/server/main.go?raw';
+
+shutdown has one function, `GracefulStop`. It blocks until the process gets SIGINT, SIGTERM or SIGHUP, then runs your
+stop functions with a deadline and returns their errors. A second signal ends the process at once.
+
+## Install
+
+shutdown needs Go 1.26 or newer.
+
+```sh
+go get github.com/vardius/shutdown/v2
+```
+
+## Your first graceful shutdown
+
+This program serves HTTP. Each request takes three seconds to answer, so that there's something to wait for.
+On a signal it stops taking connections, gives the requests in flight 10 seconds to finish, and cuts off any still running.
+If the server fails, it shuts down too:
+
+<Code code={server} lang="go" title="examples/server/main.go" />
+
+## Run it
+
+<Steps>
+
+1. From a clone of the repository, start the server:
+
+   ```sh
+   go run ./examples/server
+   ```
+
+2. In a second terminal, make a request. It takes three seconds:
+
+   ```sh
+   curl localhost:8080
+   ```
+
+3. While it waits, press Ctrl+C in the server's terminal. The server stops taking connections, but the request
+   finishes: curl prints `done`, then the server prints `stopped` and exits with status 0.
+
+4. Start the server again, make a request, and press Ctrl+C twice. The second Ctrl+C ends the process at once,
+   with exit status 1, and curl reports an empty reply.
+
+5. Start it once more and press Ctrl+\\. Go prints every goroutine's stack and exits with status 2:
+   SIGQUIT is left to Go, so you can see what a hung shutdown waits for.
+
+</Steps>
+
+## What just happened
+
+- `GracefulStop` blocked `serve` until the first Ctrl+C, a SIGINT.
+- It called the stops in order: `srv.Shutdown` closed the listener and waited for the request in flight,
+  then `srv.Close` had nothing left to cut off.
+- Both got the same context, done 10 seconds after the signal. Had the request taken longer, `srv.Shutdown` would have
+  returned `context.DeadlineExceeded`, and `srv.Close` would have cut the request off.
+- `GracefulStop` returned the stops' errors, nil here, so `main` printed `stopped` and returned normally.
+
+## Next steps
+
+<CardGrid>
+	<LinkCard title="Signals" href="../signals/" description="Which signals start a shutdown, the second signal, and what is left alone." />
+	<LinkCard title="Stop functions" href="../stops/" description="Order, the shared deadline, errors, and adapting functions without a context." />
+	<LinkCard title="Migrating from v1" href="../migrating-from-v1/" description="The v1 call and its v2 form, and what behaves differently." />
+	<LinkCard title="API reference" href="https://pkg.go.dev/github.com/vardius/shutdown/v2" description="GracefulStop's documentation on pkg.go.dev." />
+</CardGrid>

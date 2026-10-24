@@ -1,0 +1,85 @@
+---
+title: Stop functions
+description: How GracefulStop runs your stop functions, in order and on one deadline, what it returns, and how to adapt functions that take no context.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A stop is a `func(context.Context) error`: one piece of shutdown work. `(*http.Server).Shutdown` already has that shape,
+so `srv.Shutdown` is a stop as it is.
+
+```go
+err := shutdown.GracefulStop(ctx, 30*time.Second,
+	srv.Shutdown,
+	queue.Drain,
+	func(context.Context) error { return db.Close() },
+)
+```
+
+## In order
+
+The stops run one after another, in the order you pass them, on the goroutine that called `GracefulStop`. Each starts
+when the one before it returns. Put them in the order your program needs: stop taking work first, finish the work in
+flight, then close what the work used.
+
+To run some at the same time, run them in one stop of your own: start a goroutine for each and wait for them all.
+
+A nil stop makes `GracefulStop` panic as soon as it is called, so a stop you forgot to set shows up when the program
+starts, not when it shuts down.
+
+## One deadline
+
+The stops share one context. It is done `timeout` after the shutdown starts, the same moment for every stop, so the
+timeout is the time all of them get together, not each. With a timeout of 0 or less, the context is done from the start.
+
+Every stop is called, even once the deadline has passed. A stop that gets a done context should return early: most
+standard library calls that take a context do. That makes a second stop that ignores the context a good place for
+cleanup that must happen anyway, such as cutting off what the first couldn't finish:
+
+```go
+err := shutdown.GracefulStop(ctx, 10*time.Second,
+	srv.Shutdown, // wait for the requests in flight
+	func(context.Context) error { return srv.Close() }, // cut off the rest
+)
+```
+
+The context carries the values of the `ctx` you passed, such as a logger or trace, but not its cancellation: when `ctx`
+being done is what started the shutdown, the stops still get their full deadline.
+
+## Errors
+
+`GracefulStop` returns the stops' errors joined with [`errors.Join`](https://pkg.go.dev/errors#Join), in the order of
+the stops, or nil when every one returned nil. A failed stop doesn't stop the others. Look for a particular error with
+`errors.Is` or `errors.As`:
+
+```go
+if err := shutdown.GracefulStop(ctx, 10*time.Second, srv.Shutdown, flush); err != nil {
+	if errors.Is(err, context.DeadlineExceeded) {
+		log.Print("shutdown ran out of time")
+	}
+	log.Fatal(err)
+}
+```
+
+`GracefulStop` doesn't log, and adds nothing to the stops' errors. Wrap an error in your stop to say where it came from.
+
+## Functions of another shape
+
+Wrap a function that takes no context, or returns no error, in one that does:
+
+```go
+func(context.Context) error { return db.Close() }
+
+func(context.Context) error {
+	grpcServer.GracefulStop()
+	return nil
+}
+```
+
+`grpcServer.GracefulStop` ignores the deadline; to give it one, call it in a goroutine and call `grpcServer.Stop` when the
+context is done first.
+
+<Aside title="Panics">
+The stops run on your goroutine, so a stop that panics panics `GracefulStop`, and the stops after it aren't called.
+`GracefulStop` still stops listening for signals on the way out.
+</Aside>
