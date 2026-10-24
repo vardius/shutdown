@@ -2,81 +2,66 @@ package shutdown_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"syscall"
 	"time"
 
-	"github.com/vardius/shutdown"
+	"github.com/vardius/shutdown/v2"
 )
 
-func Example() {
-	// mock shutdown signal Ctrl + C
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
-	}()
+func ExampleGracefulStop() {
+	// A program passes context.Background(), so that only a signal starts the shutdown.
+	// Here a cancelled context stands in for the signal.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-	shutdown.GracefulStop(func() {
-		fmt.Println("shutdown")
-	})
+	err := shutdown.GracefulStop(ctx, 5*time.Second,
+		func(ctx context.Context) error {
+			fmt.Println("stop taking requests")
+			return nil
+		},
+		func(ctx context.Context) error {
+			fmt.Println("close the database")
+			return errors.New("database: connection reset")
+		},
+	)
 
+	fmt.Println(err)
 	// Output:
-	// shutdown
+	// stop taking requests
+	// close the database
+	// database: connection reset
 }
 
-func Example_second() {
-	// mock shutdown signal Ctrl + C followed by second Ctrl + C
-	go func() {
-		// first signal interrupt
-		time.Sleep(10 * time.Millisecond)
-		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
+func ExampleGracefulStop_timeout() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-		// second signal kill
-		time.Sleep(10 * time.Millisecond)
-		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
-	}()
-
-	shutdown.GracefulStop(func() {
-		time.Sleep(100 * time.Millisecond)
-		fmt.Println("shutdown")
+	err := shutdown.GracefulStop(ctx, 50*time.Millisecond, func(ctx context.Context) error {
+		<-ctx.Done() // a stop that would take longer than the timeout
+		return fmt.Errorf("flush queue: %w", ctx.Err())
 	})
 
+	fmt.Println(err)
+	fmt.Println(errors.Is(err, context.DeadlineExceeded))
 	// Output:
+	// flush queue: context deadline exceeded
+	// true
 }
 
-func Example_third() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		fmt.Fprintf(w, "Hello!")
-	})
-
-	httpServer := &http.Server{
-		Addr:    ":8080",
-		Handler: mux,
-	}
-
-	stop := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := httpServer.Shutdown(ctx); err != nil {
-			log.Printf("shutdown error: %v\n", err)
-		} else {
-			log.Printf("gracefully stopped\n")
+// On SIGINT, SIGTERM or SIGHUP, the server stops taking connections and gives the requests in flight
+// 10 seconds to finish. A second signal ends the process at once.
+func ExampleGracefulStop_httpServer() {
+	srv := &http.Server{Addr: ":8080", Handler: http.DefaultServeMux}
+	go func() {
+		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
 		}
-	}
-
-	// mock shutdown signal Ctrl + C
-	go func() {
-		// first signal interrupt
-		time.Sleep(10 * time.Millisecond)
-		syscall.Kill(syscall.Getpid(), syscall.SIGINT)
 	}()
 
-	shutdown.GracefulStop(stop)
-
-	// Output:
-	// gracefully stopped
+	if err := shutdown.GracefulStop(context.Background(), 10*time.Second, srv.Shutdown); err != nil {
+		log.Fatal(err)
+	}
 }
